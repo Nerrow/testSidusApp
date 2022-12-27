@@ -1,0 +1,100 @@
+x-logging: &default-logging
+  driver: loki
+  options:
+    loki-url: 'http://localhost:3100/api/prom/push'
+    loki-pipeline-stages: |
+      - multiline:
+          firstline: '^\d{4}-\d{2}-\d{2} \d{1,2}:\d{2}:\d{2}'
+          max_wait_time: 3s
+      - regex:
+          expression: '^(?P<time>\d{4}-\d{2}-\d{2} \d{1,2}:\d{2}:\d{2},d{3}) (?P<message>(?s:.*))$$'
+
+version: "3.8"
+
+services:
+  loki:
+    image: grafana/loki:2.6.1
+    command: -config.file=/etc/loki/local-config.yaml
+    ports:
+      - "3100:3100"
+
+  redis:
+    image: redis:6-alpine
+    hostname: redis
+    container_name: redis
+    logging: *default-logging
+
+  postgres:
+    image: postgres:15
+    restart: always
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    ports:
+      - '5432:5432'
+    logging: *default-logging
+    volumes:
+      - postgres:/var/lib/postgresql@15/data
+
+  app-user:
+    container_name: app-user
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app:/usr/src/app
+    environment:
+      - APP_NAME=${APP_NAME}
+      - REDIS_URL=${REDIS_URL}
+      - OTLP_GRPC_ENDPOINT=${OTLP_GRPC_ENDPOINT}
+      - PG_CONNECTION_STR=${PG_CONNECTION_STR}
+      - SECRET_KEY=${SECRET_KEY}
+    logging: *default-logging
+    depends_on:
+      - redis
+      - loki
+      - postgres
+
+  prometheus:
+    image: prom/prometheus:v2.39.1
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./etc/prometheus:/workspace
+    command:
+      - --config.file=/workspace/prometheus.yml
+      - --enable-feature=exemplar-storage
+    depends_on:
+      - loki
+    logging: *default-logging
+
+  tempo:
+    image: grafana/tempo:1.5.0
+    command: [ "--target=all", "--storage.trace.backend=local", "--storage.trace.local.path=/var/tempo", "--auth.enabled=false", "--search.enabled=true" ]
+    ports:
+      - "14250:14250"
+    depends_on:
+      - loki
+    logging: *default-logging
+
+  grafana:
+    image: grafana/grafana:9.1.7
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./etc/grafana/:/etc/grafana/provisioning/datasources
+      - ./etc/dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml
+      - ./etc/dashboards:/etc/grafana/dashboards
+    depends_on:
+      - loki
+      - prometheus
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+    logging: *default-logging
+
+volumes:
+  postgres:
+    driver: local
