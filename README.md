@@ -3,6 +3,18 @@
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 ![Coverage](https://img.shields.io/badge/coverage-75%25-green)
 
+## You can try it here
+Swagger UI
+```
+http://159.89.100.196:8000/docs
+```
+
+Grafana Dashboard
+```
+http://159.89.100.196:3000/d/dLsDQIUnz/fastapi-observability
+```
+
+
 ## Run project
 
 You can run project by cloning from GitHub and run docker-compose
@@ -15,7 +27,6 @@ touch .env
 #Fill by example from .env.example
 
 docker compose --env-file ./.env up -d --build
-
 ```
 
 ## Docs and Metrics
@@ -95,5 +106,4 @@ docker compose exec app-user pytest .
 │   └── prometheus
 │       └── prometheus.yml
 └── req.txt
-
 ```
